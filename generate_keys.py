@@ -9,4 +9,5 @@ os.makedirs(".keys/server", exist_ok=True)
 create_certificates(".keys/client", "client")
 create_certificates(".keys/server", "server")
 
+# copies the client's public key into the server's list of autorized clients
 shutil.copy(".keys/client/client.key", ".keys/authorized_clients/")
