@@ -13,20 +13,24 @@ from zmq.auth import load_certificate
 from zmq.auth.thread import ThreadAuthenticator
 
 # Windows only: use SelectorEventLoop instead of DefaultEventLoop
+# avoid known asyncio issues
 if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+# new ZeroMQ context for managing sockets
 context = zmq.Context()
 
-# Start ZAP
+# start a ZAP handler
 auth = ThreadAuthenticator(context)
 auth.start()
 auth.allow("127.0.0.1")
+# only allow explicitly trusted public keys
 auth.configure_curve(domain="*", location=".keys/authorized_clients")
 
 server_public, server_secret = load_certificate(".keys/server/server.key_secret")
 
-# Setup REP-Socket with CURVE
+# setup reply socket with CURVE
+# assigns the CURVE keys to the sockets
 socket = context.socket(zmq.REP)
 socket.curve_secretkey = server_secret
 socket.curve_publickey = server_public
@@ -34,13 +38,18 @@ socket.curve_server = True
 
 socket.bind("tcp://*:5555")
 
+# allows to forcefully terminate the script
+# poller lets the program wait for an event without blocking forever (request-reply pattern)
 poller = zmq.Poller()
+# registers the socket for readable events
 poller.register(socket, zmq.POLLIN)
 
 try:
     print("Server has been started.")
+    # waits up to 2.5 seconds for incoming messages
     while True:
         socks = dict(poller.poll(timeout=2500))
+        # checks if there is data ready to read on the server socket during the poll cycle
         if socket in socks and socks[socket] == zmq.POLLIN:
             message = socket.recv()
             print(f"Received request: {message}")
